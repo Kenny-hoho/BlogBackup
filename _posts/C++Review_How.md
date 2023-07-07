@@ -134,7 +134,7 @@ class A{
       std::cout<< i <<std::endl;
    }
    ```
-2. 单例模式（只有一个实例），这应该是Cherno自己的写法一般也不这么写？
+2. 单例模式（只有一个实例）
    ```c++
    class Singleton{
    public:
@@ -192,7 +192,19 @@ Cherno把const称为一个假的关键字，因为它并不会对产生的代码
    const如果只是一个承诺那它是不是没什么实际的用处呢？当然不是！按照下图，GetX()**必须**用const修饰，因为函数**Print(const Entity& e)** 的参数是一个**常引用**（类比上面的const int* p），意味着其引用的对象（也就是自身，因为引用只是一个别名）是一个常量，那就要确保在函数中不能对自己这个常量进行修改，就只能调用被const修饰的函数。
    ![](/article_img/2023-04-21-13-52-38.png) | ![](/article_img/2023-04-21-14-03-00.png)
    ---|---
-   **因此，如果没有修改类或者不应该修改类时，总是把这个方法标记为const**
+   **因此，如果没有修改类或者不应该修改类时，总是把这个方法标记为const！**
+
+**尽量总是使用 “const引用” 作为函数参数！**，否则会默认复制一个变量，造成性能浪费。
+```c++
+void function(const Entity& e){
+   // 只要函数中不需要更改e
+}
+```
+# inline 
+
+相当于把内联函数里的内容写在调用函数处；
+
+**相比于宏，多了类型检查，真正具有函数特性**
 
 # 枚举
 
@@ -215,7 +227,7 @@ int main(){
 
 # 构造函数
 
-**总是使用构造函数初始化列表！**，不适用函数初始化列表会导致一些变量（比如下面的m_A）被初始化多次，造成性能浪费。
+**总是使用构造函数初始化列表！**，不使用函数初始化列表会导致一些变量（比如下面的m_A）被初始化多次，造成性能浪费。
 
 ![](/article_img/2023-04-21-14-35-19.png) | ![](/article_img/2023-04-21-14-36-18.png) 
 ---|---
@@ -250,7 +262,7 @@ Player类**不仅**是Player类，它**同样**是一个Entity类。我们可以
 
 虚函数一般通过 **虚函数表（vtable）** 来实现编译，在编译阶段通过查询虚函数表确定该函数的定义。
 
-在c++11中允许用 **override** 标注被重写的虚函数。
+在c++11中允许用 **override** 标注被重写的虚函数，增加代码可读性。
 
 ```c++
 class Entity{
@@ -345,3 +357,130 @@ std::ostream& operator<<(std::ostream& stream, const Vector2& other) {
 }
 ```
 
+# 堆（heap）和栈（stack）
+
+C++中的堆和栈都指的是内存，在栈上的变量占据的内存会被**自动回收**（当变量生存周期结束时），在堆上的变量占据的内存**不会被自动回收**。
+
+```c++
+class ScopedPtr{
+private:
+   Entity* m_Ptr;
+public:
+   ScopedPtr(Entity* ptr) : m_Ptr(ptr) {}
+   ~ScopedPtr(){
+      delete m_Ptr;
+   }
+}
+
+int main(){
+   {
+      ScopedPtr e = new Entity();  // 等价于ScopedPtr e(new Entity()); 这里进行了一次隐形转换
+   }  // 到这里在栈上分配的ScopedPtr生存周期结束，会调用析构函数把在堆上分配的内存回收。
+}
+```
+
+# 智能指针（smart pointer）
+
+当定义一个智能指针时，它会调用new分配内存，之后根据用的是哪个智能指针决定什么时候自动释放内存。
+
+## unique_ptr
+
+unique_ptr是一个作用域指针，之所以叫unique_ptr是因为它是唯一的，**不允许复制一个unique_ptr**，因为当你复制之后就会出现两个指针指向同一片内存的情况，当一个unique_ptr死亡时它就会释放这片内存导致另一个unique_ptr指向一片被释放的内存。
+```c++
+#include <memory>
+class Entity {
+public:
+	Entity() {
+		Print("Create Entity!");
+	}
+	~Entity() {
+		Print("Destroy Entity!");
+	}
+};
+
+int main() {
+	{
+		// std::unique_ptr<Entity> e(new Entity()); 
+      std::unique_ptr<Entity> e = std::make_unique<Entity>(); // 等价于上面的写法，更加推荐！
+	}
+}
+```
+![](/article_img/2023-04-24-13-01-12.png)
+
+## shared_ptr
+
+shared_ptr和unique_ptr的区别就在于它**允许复制**，这是借助**引用计数（reference count）**实现的。当shared_ptr被复制之后，引用计数也会加一，当引用计数为0时，才释放内存。
+
+```c++
+int main() {
+	{
+		std::shared_ptr<Entity> e0;
+		{
+			std::shared_ptr<Entity> e = std::make_shared<Entity>();
+			e0 = e;   // 可以复制
+		} // 当e死亡时，不会释放Entity的内存
+	} // 当e0也死亡时，才会释放Entity内存
+}
+```
+![](/article_img/2023-04-24-12-58-45.png)
+
+
+# C++的复制和拷贝构造函数
+
+**尽量总是使用 “const引用” 作为函数参数！**，否则会默认复制一个变量，造成性能浪费。
+```c++
+void function(const Entity& e){
+   // 只要函数中不需要更改e
+}
+```
+
+## 浅拷贝
+
+**只会复制 "表面" 的内容**，例如下面的代码，默认的拷贝构造函数只会复制这个类的成员（m_buffer和m_Size）而不会去复制m_buffer指向的内存。就会导致复制后的类实例中的m_buffer指针仍然指向原来m_buffer指向的内存，当析构函数调用时就会将同一片内存释放两次，程序崩溃；或者当要修改复制后的内容时连带原来的内容一起修改。
+```c++
+class MyString{
+private:
+   char* m_buffer;
+   int m_Size;
+public:
+   /*
+   其他定义
+   */
+
+   // 默认拷贝构造函数
+   String(const String& other) : m_buffer(other.m_buffer), m_Size(other.m_Size) {}
+}
+```
+
+## 深拷贝
+
+与浅拷贝相对，在我们自己定义的类中需要**重新写拷贝构造函数**。
+
+```c++  
+class MyString{
+private:
+   char* m_buffer;
+   int m_Size;
+public:
+   /*
+   其他定义
+   */
+
+   // 默认拷贝构造函数
+   MyString(const String& other) : m_Size(other.m_Size) {
+      m_buffer = new char[m_Size + 1];
+      memcopy( m_buffer, other.m_buffer, m_Size + 1);
+   }
+}
+```
+
+1. TCP和UDP
+2. 内存管理
+3. 进程线程（锁）
+4. 设计模式
+5. 右值
+6. 红黑树
+7. 渲染管线
+8. 渲染方程
+9. tcp三次握手四次挥手
+10. tcp和udp
