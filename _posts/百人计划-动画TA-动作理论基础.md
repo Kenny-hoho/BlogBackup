@@ -4,7 +4,7 @@ date: 2023-03-29
 index_img: "/img/bg/West2.jpg"
 tags: [百人计划]
 categories: 
-   -[动画TA]
+   -[TA]
 ---
 
 [百人计划-动画TA-动作理论基础](https://www.bilibili.com/video/BV1Bh411t7AF?p=2&vd_source=93b215eab72b2548f75d0772e28f8b20)
